@@ -4,13 +4,15 @@ import 'package:autentikasi/pages/login.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // Inisialisasi Firebase
-  runApp(const App());
+  try {
+    await Firebase.initializeApp();
+    runApp(const App());
+  } catch (e) {
+    print("Error initializing Firebase: $e");
+  }
 }
-
 class App extends StatelessWidget {
   const App({super.key});
-
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(

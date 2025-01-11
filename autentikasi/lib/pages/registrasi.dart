@@ -1,6 +1,10 @@
-import 'package:autentikasi/pages/login.dart';
+import 'package:autentikasi/auth/auth_service.dart';
+import 'package:autentikasi/pages/profil.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:autentikasi/pages/login.dart';
 
 class RegistrasiPages extends StatefulWidget {
   const RegistrasiPages({super.key});
@@ -14,8 +18,8 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
+  final AuthService _authService = AuthService();
+  final TextEditingController confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
@@ -26,6 +30,72 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
     passwordController.dispose();
     confirmPasswordController.dispose();
     super.dispose();
+  }
+
+void _registerUser() async {
+  if (!_formKey.currentState!.validate()) {
+    return; 
+  }
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(
+      child: CircularProgressIndicator(),
+    ),
+  );
+  try {
+    UserCredential userCredential = await FirebaseAuth.instance
+        .createUserWithEmailAndPassword(
+      email: emailController.text.trim(),
+      password: passwordController.text.trim(),
+    );
+    User? user = userCredential.user;
+    if (user != null) {
+      
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'email': user.email,  
+        'phone': phoneController.text.trim(),  
+        'createdAt': Timestamp.now(),  
+      });
+      Navigator.of(context).pop(); 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registration successful')),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPages()),
+        (route) => false,
+      );
+    }
+  } on FirebaseAuthException catch (e) {
+    Navigator.of(context).pop(); 
+    String message;
+    if (e.code == 'weak-password') {
+      message = 'The password provided is too weak.';
+    } else if (e.code == 'email-already-in-use') {
+      message = 'Akun dengan email tersebut telah terdaftar.';
+    } else if (e.code == 'invalid-email') {
+      message = 'The email address is invalid.';
+    } else {
+      message = 'An error occurred. Please try again.';
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message))
+    );
+  }
+}
+  Future<void> _signInWithGoogle() async {
+    final userCredential = await _authService.signInWithGoogle();
+    if (userCredential?.user != null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Sign-In failed')),
+      );
+    }
   }
 
   @override
@@ -55,17 +125,14 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                     children: [
                       const Text(
                         "Enter your mobile number",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: phoneController,
                         keyboardType: TextInputType.phone,
                         inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly, // Hanya angka
+                          FilteringTextInputFormatter.digitsOnly,
                         ],
                         validator: (value) {
                           if (value == null || value.isEmpty) {
@@ -84,10 +151,7 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                       const SizedBox(height: 20),
                       const Text(
                         "Enter your email",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
@@ -113,10 +177,7 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                       const SizedBox(height: 20),
                       const Text(
                         "Enter your password",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
@@ -151,10 +212,7 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                       const SizedBox(height: 20),
                       const Text(
                         "Re-enter your password",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
@@ -180,8 +238,7 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                             ),
                             onPressed: () {
                               setState(() {
-                                _obscureConfirmPassword =
-                                    !_obscureConfirmPassword;
+                                _obscureConfirmPassword = !_obscureConfirmPassword;
                               });
                             },
                           ),
@@ -192,16 +249,7 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                       ),
                       const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: () {
-                          if (_formKey.currentState!.validate()) {
-                            // Proses registrasi
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Registration successful'),
-                              ),
-                            );
-                          }
-                        },
+                        onTap: _registerUser,
                         child: Container(
                           width: MediaQuery.of(context).size.width,
                           height: 56,
@@ -262,9 +310,7 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                       ),
                       const SizedBox(height: 10),
                       ElevatedButton.icon(
-                        onPressed: () {
-                          // Tambahkan fungsi untuk login Google
-                        },
+                        onPressed: _signInWithGoogle,
                         icon: Image.asset(
                           'assets/google.png',
                           width: 24,
@@ -278,25 +324,6 @@ class _RegistrasiPagesState extends State<RegistrasiPages> {
                           minimumSize: const Size(double.infinity, 50),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // Tambahkan fungsi untuk login Apple
-                        },
-                        icon: Image.asset(
-                          'assets/apple.png',
-                          width: 24,
-                          height: 24,
-                        ),
-                        label: const Text("Continue with Apple"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          side: const BorderSide(color: Colors.black),
-                          minimumSize: const Size(double.infinity, 50),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
                     ],
                   ),
                 ),

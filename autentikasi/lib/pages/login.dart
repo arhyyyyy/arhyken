@@ -1,84 +1,76 @@
+import 'package:autentikasi/auth/auth_service.dart';
 import 'package:autentikasi/pages/forgetpassword.dart';
 import 'package:autentikasi/pages/profil.dart';
 import 'package:autentikasi/pages/registrasi.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/material.dart'; // Ganti dengan halaman yang sesuai setelah login
-import 'package:flutter/services.dart'; // Untuk menangani error di iOS
+import 'package:flutter/material.dart';
 
 class LoginPages extends StatefulWidget {
   const LoginPages({super.key});
-
   @override
   State<LoginPages> createState() => _LoginPagesState();
 }
 
 class _LoginPagesState extends State<LoginPages> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-
-  // TextEditingControllers for phone and password fields
-  final TextEditingController phoneController = TextEditingController();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AuthService _authService = AuthService(); // Instance AuthService
+  final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-
-  // FormKey for validation
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  // Obscure password flag
   bool _obscurePassword = true;
 
-  // Fungsi untuk login dengan Google
-  Future<void> _signInWithGoogle() async {
+  // Fungsi login dengan email dan password
+  Future<void> _loginUser() async {
+    if (!_formKey.currentState!.validate()) return;
     try {
-      // Melakukan sign-in dengan Google
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
-      if (googleUser == null) {
-        // Jika user membatalkan login (googleUser null), tampilkan pesan
-        print("User canceled Google Sign-In");
-        return; // Menghindari error jika user cancel
-      }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: emailController.text,
+        password: passwordController.text,
       );
-
-      // Mencoba login menggunakan kredensial yang didapatkan
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
-
-      if (userCredential.user != null) {
-        // Login berhasil, arahkan ke halaman utama
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfilePage()), // Ganti dengan halaman yang sesuai
-        );
+      String uid = userCredential.user?.uid ?? '';
+      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+      if (!doc.exists) {
+        await _firestore.collection('users').doc(uid).set({
+          'name': '',
+          'phone': '',
+          'address': '',
+          'dob': '',
+        });
       }
-    } catch (e) {
-      // Menangani error jika terjadi
-      print("Error during Google Sign-In: $e");
-      // Anda bisa menampilkan pesan kesalahan jika diperlukan
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Login successful')),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const ProfilePage()),
+      );
+    } on FirebaseAuthException catch (e) {
+      String message = '';
+      if (e.code == 'user-not-found') {
+        message = 'Email tidak ditemukan.';
+      } else {
+        message = 'Password yang Anda masukkan salah.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     }
   }
 
-  // Fungsi untuk login dengan Apple
-  Future<void> _signInWithApple() async {
-    try {
-      // Implementasi login Apple di sini
-      // Untuk login dengan Apple, Anda bisa menggunakan package `sign_in_with_apple`
-      // Pastikan Anda telah mengonfigurasi Firebase dan Apple Sign-In di Firebase Console
-
-      print("Login with Apple (Fitur ini memerlukan konfigurasi lebih lanjut)");
-
-      // Jika login Apple berhasil, Anda bisa mengarahkan ke halaman berikutnya
+  // Fungsi login dengan Google
+  Future<void> _signInWithGoogle() async {
+    final userCredential = await _authService.signInWithGoogle();
+    if (userCredential?.user != null) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LoginPages()), // Ganti dengan halaman yang sesuai
+        MaterialPageRoute(builder: (context) => const HomePage()),
       );
-    } catch (e) {
-      print("Error during Apple Sign-In: $e");
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Sign-In failed')),
+      );
     }
   }
 
@@ -110,7 +102,7 @@ class _LoginPagesState extends State<LoginPages> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            "Enter your mobile number",
+                            "Enter your email address",
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w400,
@@ -118,23 +110,20 @@ class _LoginPagesState extends State<LoginPages> {
                           ),
                           const SizedBox(height: 10),
                           TextFormField(
-                            controller: phoneController,
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly, // Hanya angka
-                            ],
+                            controller: emailController,
+                            keyboardType: TextInputType.emailAddress,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Mobile number must be filled';
+                                return 'Email must be filled';
+                              }
+                              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                                return 'Enter a valid email address';
                               }
                               return null;
                             },
                             decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.phone),
-                              hintText: '+91 1712345678',
-                              suffixIcon: const Icon(
-                                Icons.check_circle_outline_outlined,
-                              ),
+                              prefixIcon: const Icon(Icons.email),
+                              hintText: 'abcd@gmail.com',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(20),
                               ),
@@ -204,11 +193,7 @@ class _LoginPagesState extends State<LoginPages> {
                           ),
                           const SizedBox(height: 20),
                           GestureDetector(
-                            onTap: () {
-                              if (_formKey.currentState?.validate() ?? false) {
-                                // Handle login logic here
-                              }
-                            },
+                            onTap: _loginUser,
                             child: Container(
                               width: MediaQuery.of(context).size.width,
                               height: 56,
@@ -284,56 +269,6 @@ class _LoginPagesState extends State<LoginPages> {
                               minimumSize: const Size(double.infinity, 50),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          ElevatedButton.icon(
-                            onPressed: _signInWithApple,
-                            icon: Image.asset(
-                              'assets/apple.png',
-                              width: 24,
-                              height: 24,
-                            ),
-                            label: const Text("Continue with Apple"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              side: const BorderSide(color: Colors.black),
-                              minimumSize: const Size(double.infinity, 50),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "or",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          GestureDetector(
-                            onTap: () {
-                              // Handle guest login here
-                            },
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Continue as Guest",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
                         ],
                       ),
                     ),

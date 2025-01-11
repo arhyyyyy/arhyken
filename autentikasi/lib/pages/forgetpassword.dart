@@ -1,9 +1,46 @@
-import 'package:autentikasi/pages/verify.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-class ForgetPasswordPage extends StatelessWidget {
+class ForgetPasswordPage extends StatefulWidget {
   const ForgetPasswordPage({super.key});
+
+  @override
+  _ForgetPasswordPageState createState() => _ForgetPasswordPageState();
+}
+
+class _ForgetPasswordPageState extends State<ForgetPasswordPage> {
+  final TextEditingController _emailController = TextEditingController();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isLoading = false;
+
+  Future<void> _sendPasswordResetEmail() async {
+    if (_emailController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter your email address")),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _auth.sendPasswordResetEmail(email: _emailController.text.trim());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Password reset email sent!")),
+      );
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? "An error occurred")),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +56,7 @@ class ForgetPasswordPage extends StatelessWidget {
         ),
         centerTitle: true,
         title: const Text(
-          "Forgot",
+          "Forgot Password",
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -36,7 +73,7 @@ class ForgetPasswordPage extends StatelessWidget {
             children: [
               const Spacer(flex: 1),
               Image.asset(
-                'assets/ForgetPassword.png', 
+                'assets/ForgetPassword.png',
                 height: 200,
               ),
               const Spacer(flex: 1),
@@ -50,7 +87,7 @@ class ForgetPasswordPage extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const Text(
-                "Don't worry! It happens. Please enter your phone number associated with your account.",
+                "Enter your email address to reset your password.",
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey,
@@ -59,21 +96,10 @@ class ForgetPasswordPage extends StatelessWidget {
               ),
               const SizedBox(height: 30),
               TextField(
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly, 
-                ],
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  hintText: "Enter your mobile number",
-                  prefixIcon: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(width: 10),
-                      Text("+91"),
-                      Icon(Icons.arrow_drop_down),
-                    ],
-                  ),
-                  suffixIcon: const Icon(Icons.check_circle, color: Colors.black),
+                  hintText: "Enter your email",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10.0),
                     borderSide: const BorderSide(color: Colors.grey),
@@ -84,11 +110,7 @@ class ForgetPasswordPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => const VerifyPage()),
-                    );
-                  },
+                  onPressed: _isLoading ? null : _sendPasswordResetEmail,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 15),
@@ -96,10 +118,16 @@ class ForgetPasswordPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  child: const Text(
-                    "Get OTP",
-                    style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w800),
-                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          "Send Reset Link",
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                 ),
               ),
               const Spacer(flex: 2),
